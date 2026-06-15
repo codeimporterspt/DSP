@@ -7,6 +7,7 @@ import servicesRouter from './routes/services';
 import pdfRouter from './routes/pdf';
 import templateRouter from './routes/template';
 import uploadRouter from './routes/upload';
+import operacoesRouter from './routes/operacoes';
 
 const app = express();
 const PORT = process.env.PORT ?? 3001;
@@ -21,6 +22,7 @@ app.use('/api/revisoes', pdfRouter);
 app.use('/api/template', templateRouter);
 app.use('/api/upload', uploadRouter);
 
+app.use('/api', operacoesRouter);
 app.get('/api/health', (_req, res) => res.json({ status: 'ok' }));
 
 async function main() {

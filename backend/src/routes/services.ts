@@ -16,8 +16,8 @@ router.get('/', (req: Request, res: Response) => {
   const conditions: string[] = [];
   const params: SqlValue[] = [];
 
-  if (matricula) { conditions.push('r.matricula = ?'); params.push(matricula); }
-  if (vin) { conditions.push('r.vin = ?'); params.push(vin); }
+  if (matricula) { conditions.push('UPPER(r.matricula) = UPPER(?)'); params.push(matricula); }
+  if (vin) { conditions.push('UPPER(r.vin) = UPPER(?)'); params.push(vin); }
 
   const where = conditions.length ? conditions.join(' AND ') : '1=1';
 
@@ -34,7 +34,8 @@ router.get('/', (req: Request, res: Response) => {
       c.pais as concessao_pais,
       p.modelo as veiculo_modelo,
       p.marca as veiculo_marca,
-      p.motorizacao as veiculo_motorizacao
+      p.motorizacao as veiculo_motorizacao,
+      p.data_matricula as veiculo_data_matricula
     FROM revisoes r
     LEFT JOIN concessoes c ON c.codigo_concessao = r.codigo_concessao
     LEFT JOIN parque_circulante p ON p.vin = r.vin

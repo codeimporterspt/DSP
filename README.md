@@ -1,6 +1,6 @@
-# DSP BYD — Digital Service Passport
+# DSP — Digital Service Passport
 
-Sistema de registo de manutenção para viaturas BYD.
+Sistema de registo de manutenção para viaturas.
 
 ## Stack
 
@@ -45,7 +45,7 @@ Alternar role na sidebar (botões "Importador" / "Concess.") ou via URL:
 
 | Role | Nome | Acesso |
 |------|------|--------|
-| `importador` | BYD Portugal | Tudo, incluindo Atualizar Viaturas |
+| `importador` | Importador | Tudo, incluindo Atualizar Viaturas |
 | `concessionario` | M. & Costas Power | Pesquisa + Novo Registo |
 
 ---
@@ -71,7 +71,7 @@ Alternar role na sidebar (botões "Importador" / "Concess.") ou via URL:
 
 ## Base de Dados
 
-SQLite auto-inicializada em `backend/dsp_byd.db` na primeira execução, com dados de seed:
+SQLite auto-inicializada em `backend/dsp.db` na primeira execução, com dados de seed:
 
 - 3 viaturas (2× EV, 1× PHEV)
 - 3 concessionários (inclui M. & Costas Power - Braga, código 4711)

@@ -4,8 +4,8 @@ export default {
   theme: {
     extend: {
       colors: {
-        byd: {
-          red: '#111111',
+        brand: {
+          primary: '#111111',
           dark: '#1a1a1a',
         },
       },

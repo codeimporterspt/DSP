@@ -77,10 +77,10 @@ export default function AtualizarViaturas() {
   return (
     <div className="p-6">
       <Breadcrumb />
-      <h1 className="text-xl font-bold text-byd-dark mb-6">Atualizar Viaturas</h1>
+      <h1 className="text-xl font-bold text-brand-dark mb-6">Atualizar Viaturas</h1>
 
       <div className="bg-white rounded-lg border border-gray-200 p-6 mb-6">
-        <h2 className="text-sm font-semibold text-byd-dark mb-2">Upload de Ficheiro</h2>
+        <h2 className="text-sm font-semibold text-brand-dark mb-2">Upload de Ficheiro</h2>
         <p className="text-xs text-gray-500 mb-4">
           Aceita ficheiros <strong>.xlsx</strong> ou <strong>.csv</strong> com as colunas: Matrícula, VIN, Data de Matrícula, Modelo, Marca, Motorização.{' '}
           <button onClick={handleTemplateDownload} className="text-gray-800 hover:underline font-medium">
@@ -110,7 +110,7 @@ export default function AtualizarViaturas() {
           ) : (
             <div className="flex flex-col items-center gap-2">
               <div className="text-3xl text-gray-300">📂</div>
-              <p className="text-sm font-medium text-byd-dark">Arraste o ficheiro aqui ou clique para selecionar</p>
+              <p className="text-sm font-medium text-brand-dark">Arraste o ficheiro aqui ou clique para selecionar</p>
               <p className="text-xs text-gray-400">.xlsx ou .csv — máx. 5 MB</p>
               <button
                 type="button"
@@ -126,7 +126,7 @@ export default function AtualizarViaturas() {
 
       {result && (
         <div className={`rounded-lg border p-5 ${result.errors.length === 0 ? 'bg-green-50 border-green-200' : 'bg-yellow-50 border-yellow-200'}`}>
-          <h3 className="font-semibold text-byd-dark mb-3 text-sm">Resultado do Upload</h3>
+          <h3 className="font-semibold text-brand-dark mb-3 text-sm">Resultado do Upload</h3>
           <div className="flex gap-6 mb-3">
             <div className="text-center">
               <p className="text-2xl font-bold text-green-600">{result.inserted}</p>

@@ -10,7 +10,7 @@ router.get('/search', (req: Request, res: Response) => {
     return;
   }
   const vehicle = queryOne(
-    'SELECT * FROM parque_circulante WHERE matricula = ? OR vin = ? LIMIT 1',
+    'SELECT * FROM parque_circulante WHERE UPPER(matricula) = UPPER(?) OR UPPER(vin) = UPPER(?) LIMIT 1',
     [matricula ?? '', vin ?? '']
   );
   if (!vehicle) {

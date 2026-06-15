@@ -21,6 +21,21 @@ router.get('/:vin/pdf', (req: Request, res: Response) => {
   const today = new Date().toISOString().split('T')[0];
   const filename = `DSP_${vin}_${today}.pdf`;
 
+  // services ordered DESC — index 0 is most recent
+  const mostRecent = services.length > 0 ? services[0] : null;
+  let nextMaintenanceNote: string | null = null;
+  if (mostRecent) {
+    const isEV = vehicle.motorizacao === 'EV';
+    const kmInterval = isEV ? 30000 : 15000;
+    const monthInterval = isEV ? 24 : 12;
+    const nextKm = Number(mostRecent.quilometros) + kmInterval;
+    const lastDate = new Date(mostRecent.data_servico);
+    lastDate.setMonth(lastDate.getMonth() + monthInterval);
+    const [ny, nm, nd] = lastDate.toISOString().split('T')[0].split('-');
+    const nextKmFormatted = nextKm.toLocaleString('pt-PT');
+    nextMaintenanceNote = `A próxima manutenção deverá ser efetuada aos ${nextKmFormatted} Km ou a ${nd}/${nm}/${ny} (conforme ocorrer primeiro).`;
+  }
+
   res.setHeader('Content-Type', 'application/pdf');
   res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
 
@@ -50,8 +65,20 @@ router.get('/:vin/pdf', (req: Request, res: Response) => {
     .text(`Modelo: ${vehicle.modelo}`, 260, boxY + 26)
     .text(`Motorização: ${vehicle.motorizacao}`, 260, boxY + 40);
 
+  // Next maintenance note (below vehicle info box)
+  const noteY = boxY + 70 + 10;
+  const noteHeight = 36;
+  if (nextMaintenanceNote) {
+    doc.rect(40, noteY, pageWidth, noteHeight).fill('#F7F7F7');
+    doc.rect(40, noteY, 4, noteHeight).fill(DARK);
+    doc.fillColor(DARK).fontSize(8).font('Helvetica-Bold')
+      .text('Próxima Manutenção  ', 52, noteY + 10, { continued: true })
+      .font('Helvetica').fillColor('#333333')
+      .text(nextMaintenanceNote, { width: pageWidth - 20 });
+  }
+
   // Table
-  const tableTop = 210;
+  const tableTop = nextMaintenanceNote ? noteY + noteHeight + 10 : 210;
   const colWidths = [150, 70, 80, 230];
   const cols = ['Operação Realizada', 'Quilómetros', 'Data', 'Concessionário'];
   let xPos = 40;

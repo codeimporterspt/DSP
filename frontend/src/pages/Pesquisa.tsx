@@ -1,5 +1,7 @@
 import React, { useState, useCallback } from 'react';
+import { useNavigate } from 'react-router-dom';
 import Breadcrumb from '../components/Breadcrumb';
+import { useAuth } from '../context/AuthContext';
 
 interface ServiceRecord {
   id: number;
@@ -9,8 +11,15 @@ interface ServiceRecord {
   data_servico: string;
   quilometros: number;
   tipo_operacao: string;
+  created_at: string;
   veiculo_modelo: string;
+  veiculo_marca: string;
+  veiculo_motorizacao: string;
+  veiculo_data_matricula: string;
   concessao_nome: string;
+  concessao_cidade: string;
+  concessao_cp: string;
+  concessao_pais: string;
 }
 
 interface EditState {
@@ -32,6 +41,8 @@ export default function Pesquisa() {
   const [loading, setLoading] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const navigate = useNavigate();
+  const { user } = useAuth();
 
   const doSearch = useCallback(async (p: number) => {
     if (!matricula.trim() && !vin.trim()) return;
@@ -98,7 +109,7 @@ export default function Pesquisa() {
   return (
     <div className="p-6">
       <Breadcrumb />
-      <h1 className="text-xl font-bold text-byd-dark mb-6">Pesquisa de Registos</h1>
+      <h1 className="text-xl font-bold text-brand-dark mb-6">Pesquisa de Registos</h1>
 
       {/* Search form */}
       <div className="bg-white rounded-lg border border-gray-200 p-5 mb-6">
@@ -143,9 +154,9 @@ export default function Pesquisa() {
             <>
               <div className="flex items-center justify-between px-5 py-3 border-b border-gray-100">
                 <p className="text-sm text-gray-500">
-                  Mostrando <span className="font-semibold text-byd-dark">{(page - 1) * PAGE_SIZE + 1}</span> até{' '}
-                  <span className="font-semibold text-byd-dark">{Math.min(page * PAGE_SIZE, total)}</span> de{' '}
-                  <span className="font-semibold text-byd-dark">{total}</span> Registos
+                  Mostrando <span className="font-semibold text-brand-dark">{(page - 1) * PAGE_SIZE + 1}</span> até{' '}
+                  <span className="font-semibold text-brand-dark">{Math.min(page * PAGE_SIZE, total)}</span> de{' '}
+                  <span className="font-semibold text-brand-dark">{total}</span> Registos
                 </p>
                 <button onClick={handleGeneratePdf} className="btn-primary text-xs">
                   Gerar Ficheiro
@@ -156,8 +167,8 @@ export default function Pesquisa() {
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
-                      {['Matrícula', 'VIN', 'Modelo', 'Código CSS', 'Tipo de Operações', 'Quilómetros', 'Data de Serviço', 'Ação'].map(h => (
-                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-byd-dark uppercase tracking-wide whitespace-nowrap">{h}</th>
+                      {['Matrícula', 'VIN', 'Modelo', 'Código CSS', 'Concessionário', 'Tipo de Operações', 'Quilómetros', 'Data de Serviço', 'Ação'].map(h => (
+                        <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-brand-dark uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
                     </tr>
                   </thead>
@@ -169,6 +180,7 @@ export default function Pesquisa() {
                           <td className="px-4 py-3 text-xs text-gray-600 font-mono">{r.vin}</td>
                           <td className="px-4 py-3 text-xs">{r.veiculo_modelo ?? '-'}</td>
                           <td className="px-4 py-3 text-xs">{r.codigo_concessao}</td>
+                          <td className="px-4 py-3 text-xs">{r.concessao_nome ?? '-'}</td>
                           <td className="px-4 py-3 text-xs">{r.tipo_operacao}</td>
                           <td className="px-4 py-3 text-xs">{r.quilometros.toLocaleString('pt-PT')} Km</td>
                           <td className="px-4 py-3 text-xs">{r.data_servico}</td>
@@ -176,25 +188,27 @@ export default function Pesquisa() {
                             <div className="flex gap-2">
                               <button
                                 title="Ver"
-                                onClick={() => setEditState({ id: r.id, codigo_concessao: r.codigo_concessao, data_servico: r.data_servico, quilometros: String(r.quilometros), tipo_operacao: r.tipo_operacao })}
-                                className="text-gray-500 hover:text-byd-dark text-base"
+                                onClick={() => navigate('/pesquisa/detalhe', { state: { record: r } })}
+                                className="text-gray-500 hover:text-brand-dark text-base"
                               >👁</button>
+                              {(user.role === 'importador' || r.codigo_concessao === user.codigo_concessao) && (<>
                               <button
                                 title="Editar"
                                 onClick={() => setEditState({ id: r.id, codigo_concessao: r.codigo_concessao, data_servico: r.data_servico, quilometros: String(r.quilometros), tipo_operacao: r.tipo_operacao })}
-                                className="text-gray-500 hover:text-byd-dark text-base"
+                                className="text-gray-500 hover:text-brand-dark text-base"
                               >✏</button>
                               <button
                                 title="Eliminar"
                                 onClick={() => setDeleteConfirm(r.id)}
                                 className="text-gray-500 hover:text-black text-base"
                               >🗑</button>
+                              </>)}
                             </div>
                           </td>
                         </tr>
                         {editState?.id === r.id && (
                           <tr className="bg-blue-50 border-b border-blue-100">
-                            <td colSpan={8} className="px-4 py-4">
+                            <td colSpan={9} className="px-4 py-4">
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                 <div>
                                   <label className="label">Data de Serviço</label>
@@ -226,7 +240,7 @@ export default function Pesquisa() {
                         )}
                         {deleteConfirm === r.id && (
                           <tr className="bg-gray-100 border-b border-gray-200">
-                            <td colSpan={8} className="px-4 py-3">
+                            <td colSpan={9} className="px-4 py-3">
                               <p className="text-sm text-gray-700 mb-2">Tem a certeza que deseja eliminar este registo?</p>
                               <div className="flex gap-2">
                                 <button onClick={() => handleDelete(r.id)} className="btn-primary text-xs">Eliminar</button>

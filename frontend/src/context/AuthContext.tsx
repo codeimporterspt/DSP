@@ -10,7 +10,7 @@ export interface User {
 
 const MOCK_USERS: Record<Role, User> = {
   importador: { role: 'importador', nome: 'Utilizador 1' },
-  concessionario: { role: 'concessionario', nome: 'Utilizador 1', codigo_concessao: '4711' },
+  concessionario: { role: 'concessionario', nome: 'Utilizador 1', codigo_concessao: '02412' },
 };
 
 interface AuthContextType {

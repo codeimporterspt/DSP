@@ -6,8 +6,6 @@ import { queryOne, execute } from '../db/database';
 const router = Router();
 const upload = multer({ storage: multer.memoryStorage(), limits: { fileSize: 5 * 1024 * 1024 } });
 
-const MOTORIZACAO_VALUES = ['EV', 'PHEV'];
-
 router.post('/', upload.single('file'), (req: Request, res: Response) => {
   if (!req.file) { res.status(400).json({ error: 'Ficheiro não fornecido' }); return; }
 
@@ -33,10 +31,9 @@ router.post('/', upload.single('file'), (req: Request, res: Response) => {
   const iData = idxOf(['data de matrícula', 'data_matricula', 'data matricula']);
   const iModelo = idxOf(['modelo']);
   const iMarca = idxOf(['marca']);
-  const iMot = idxOf(['motorização', 'motorizacao']);
 
-  if (iMat < 0 || iVin < 0 || iData < 0 || iModelo < 0 || iMot < 0) {
-    res.status(400).json({ error: 'Colunas obrigatórias em falta: Matrícula, VIN, Data de Matrícula, Modelo, Motorização' });
+  if (iMat < 0 || iVin < 0 || iData < 0 || iModelo < 0) {
+    res.status(400).json({ error: 'Colunas obrigatórias em falta: Matrícula, VIN, Data de Matrícula, Modelo' });
     return;
   }
 
@@ -48,7 +45,6 @@ router.post('/', upload.single('file'), (req: Request, res: Response) => {
     const matricula = String(row[iMat] ?? '').trim();
     const modelo = String(row[iModelo] ?? '').trim();
     const marca = iMarca >= 0 ? String(row[iMarca] ?? '').trim() : '';
-    const motorizacao = String(row[iMot] ?? '').trim().toUpperCase();
 
     let data_matricula = '';
     const rawDate = row[iData];
@@ -62,13 +58,9 @@ router.post('/', upload.single('file'), (req: Request, res: Response) => {
       results.errors.push(`Linha ${rowNum}: campos obrigatórios em falta`);
       return;
     }
-    if (!MOTORIZACAO_VALUES.includes(motorizacao)) {
-      results.errors.push(`Linha ${rowNum}: motorização inválida (use EV ou PHEV)`);
-      return;
-    }
 
     try {
-      const existing = queryOne('SELECT id FROM parque_circulante WHERE vin = ?', [vin]);
+      const existing = queryOne<{ motorizacao: string }>('SELECT motorizacao FROM parque_circulante WHERE vin = ?', [vin]);
       execute(
         `INSERT INTO parque_circulante (vin, matricula, data_matricula, modelo, marca, motorizacao)
          VALUES (?, ?, ?, ?, ?, ?)
@@ -76,9 +68,8 @@ router.post('/', upload.single('file'), (req: Request, res: Response) => {
            matricula = excluded.matricula,
            data_matricula = excluded.data_matricula,
            modelo = excluded.modelo,
-           marca = excluded.marca,
-           motorizacao = excluded.motorizacao`,
-        [vin, matricula, data_matricula, modelo, marca, motorizacao]
+           marca = excluded.marca`,
+        [vin, matricula, data_matricula, modelo, marca, existing?.motorizacao ?? 'EV']
       );
       if (existing) results.updated++; else results.inserted++;
     } catch (e) {
