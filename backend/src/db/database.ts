@@ -32,6 +32,10 @@ export async function initDb(): Promise<void> {
 }
 
 function initSchema() {
+  // Migrations for existing DBs
+  try { _db!.run("ALTER TABLE tipos_operacao ADD COLUMN intervalo_kms INTEGER"); } catch {}
+  try { _db!.run("ALTER TABLE tipos_operacao ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1"); } catch {}
+
   _db!.run(`
     CREATE TABLE IF NOT EXISTS parque_circulante (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -63,6 +67,8 @@ function initSchema() {
     CREATE TABLE IF NOT EXISTS tipos_operacao (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       nome TEXT NOT NULL UNIQUE,
+      intervalo_kms INTEGER,
+      ativo INTEGER NOT NULL DEFAULT 1,
       created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
     CREATE TABLE IF NOT EXISTS operacoes (
@@ -116,7 +122,8 @@ function seedOperacoesIfEmpty() {
   const count = (res[0]?.values[0]?.[0] as number) ?? 0;
   if (count > 0) return;
   _db!.run(`
-    INSERT INTO tipos_operacao (nome) VALUES ('PHEV'), ('BEV'), ('HEV');
+    INSERT INTO tipos_operacao (nome, intervalo_kms, ativo) VALUES
+      ('PHEV', 15000, 1), ('HEV', 30000, 1);
     INSERT INTO operacoes (codigo, tipo_id, ativo, observacoes) VALUES
       ('15000/1Ano',   1, 1, '15 000 Km / 1 Ano'),
       ('30000/2Anos',  1, 1, '30 000 Km / 2 Anos'),

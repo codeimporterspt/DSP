@@ -4,6 +4,9 @@ import Breadcrumb from '../components/Breadcrumb';
 interface TipoOperacao {
   id: number;
   nome: string;
+  intervalo_kms: number | null;
+  ativo: number;
+  codigos_associados: number;
   created_at: string;
 }
 
@@ -21,6 +24,27 @@ interface Operacao {
 type ModalMode = 'create' | 'edit' | 'view';
 
 const PAGE_SIZE = 10;
+
+function formatCodigo(codigo: string): string {
+  const match = codigo.match(/^(\d+)\/(\d+)(Anos?)$/i);
+  if (!match) return codigo;
+  const km = parseInt(match[1], 10).toString().replace(/\B(?=(\d{3})+(?!\d))/g, ' ');
+  const anos = parseInt(match[2], 10);
+  return `${km} Km / ${anos} ${anos === 1 ? 'Ano' : 'Anos'}`;
+}
+
+function getDuracao(codigo: string): string {
+  const match = codigo.match(/^(\d+)\/(\d+)(Anos?)$/i);
+  if (!match) return '-';
+  const anos = parseInt(match[2], 10);
+  return `${anos} ${anos === 1 ? 'Ano' : 'Anos'}`;
+}
+
+function formatDate(dateStr: string): string {
+  const d = new Date(dateStr.replace(' ', 'T'));
+  if (isNaN(d.getTime())) return dateStr;
+  return d.toLocaleDateString('pt-PT', { day: '2-digit', month: '2-digit', year: 'numeric' });
+}
 
 export default function BackofficeOperacoes() {
   const [rows, setRows] = useState<Operacao[]>([]);
@@ -41,8 +65,12 @@ export default function BackofficeOperacoes() {
   const [tiposModal, setTiposModal] = useState(false);
   const [tipoEditId, setTipoEditId] = useState<number | null>(null);
   const [tipoEditNome, setTipoEditNome] = useState('');
+  const [tipoEditIntervalo, setTipoEditIntervalo] = useState('');
+  const [tipoEditAtivo, setTipoEditAtivo] = useState(true);
   const [showNewTipo, setShowNewTipo] = useState(false);
   const [newTipoNome, setNewTipoNome] = useState('');
+  const [newTipoIntervalo, setNewTipoIntervalo] = useState('');
+  const [newTipoAtivo, setNewTipoAtivo] = useState(true);
 
   // Delete confirm
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -60,9 +88,11 @@ export default function BackofficeOperacoes() {
     }
   }, []);
 
-  const loadTipos = useCallback(async () => {
+  const loadTipos = useCallback(async (): Promise<TipoOperacao[]> => {
     const res = await fetch('/api/tipos-operacao');
-    setTipos(await res.json());
+    const data: TipoOperacao[] = await res.json();
+    setTipos(data);
+    return data;
   }, []);
 
   useEffect(() => {
@@ -71,8 +101,9 @@ export default function BackofficeOperacoes() {
   }, [loadOperacoes, loadTipos]);
 
   // --- Operação modal helpers ---
-  const openCreateModal = () => {
-    setOpForm({ codigo: '', tipo_id: tipos[0] ? String(tipos[0].id) : '', ativo: true, observacoes: '' });
+  const openCreateModal = async () => {
+    const freshTipos = await loadTipos();
+    setOpForm({ codigo: '', tipo_id: freshTipos[0] ? String(freshTipos[0].id) : '', ativo: true, observacoes: '' });
     setOpErrors({});
     setOpModal({ open: true, mode: 'create', data: null });
   };
@@ -136,10 +167,16 @@ export default function BackofficeOperacoes() {
     const res = await fetch('/api/tipos-operacao', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: newTipoNome.trim() }),
+      body: JSON.stringify({
+        nome: newTipoNome.trim(),
+        intervalo_kms: newTipoIntervalo ? parseInt(newTipoIntervalo, 10) : null,
+        ativo: newTipoAtivo,
+      }),
     });
     if (!res.ok) { const e = await res.json(); alert(e.error); return; }
     setNewTipoNome('');
+    setNewTipoIntervalo('');
+    setNewTipoAtivo(true);
     setShowNewTipo(false);
     loadTipos();
   };
@@ -149,7 +186,11 @@ export default function BackofficeOperacoes() {
     const res = await fetch(`/api/tipos-operacao/${id}`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ nome: tipoEditNome.trim() }),
+      body: JSON.stringify({
+        nome: tipoEditNome.trim(),
+        intervalo_kms: tipoEditIntervalo ? parseInt(tipoEditIntervalo, 10) : null,
+        ativo: tipoEditAtivo,
+      }),
     });
     if (!res.ok) { const e = await res.json(); alert(e.error); return; }
     setTipoEditId(null);
@@ -207,7 +248,7 @@ export default function BackofficeOperacoes() {
                 </tr>
               ) : rows.map((row, i) => (
                 <tr key={row.id} className={`border-b border-gray-100 ${i % 2 === 0 ? 'bg-white' : 'bg-[#f9f9f9]'}`}>
-                  <td className="px-4 py-3 font-medium">{row.codigo}</td>
+                  <td className="px-4 py-3 font-medium">{formatCodigo(row.codigo)}</td>
                   <td className="px-4 py-3 text-xs">{row.tipo_nome ?? '-'}</td>
                   <td className="px-4 py-3">
                     {row.ativo === 1
@@ -266,23 +307,44 @@ export default function BackofficeOperacoes() {
               {viewOnly ? 'Detalhe da Operação' : opModal.mode === 'edit' ? 'Editar Operação' : 'Nova Operação'}
             </h2>
 
-            <div className="space-y-4">
-              <div>
-                <label className="label">Código {!viewOnly && <span className="text-red-500">*</span>}</label>
-                <input
-                  className="input-field"
-                  value={opForm.codigo}
-                  onChange={e => setOpForm(f => ({ ...f, codigo: e.target.value }))}
-                  disabled={viewOnly}
-                />
-                {opErrors.codigo && <p className="text-red-500 text-xs mt-1">{opErrors.codigo}</p>}
-              </div>
+            {viewOnly && opModal.data ? (
+              <dl className="divide-y divide-gray-100">
+                {([
+                  ['Código', formatCodigo(opModal.data.codigo)],
+                  ['Observações', opModal.data.observacoes ?? '-'],
+                  ['Tipo', opModal.data.tipo_nome ?? '-'],
+                  ['Status', opModal.data.ativo === 1 ? 'Ativo' : 'Inativo'],
+                  ['Duração', getDuracao(opModal.data.codigo)],
+                  ['Data de criação', formatDate(opModal.data.created_at)],
+                  ['Última atualização', formatDate(opModal.data.updated_at)],
+                ] as [string, string][]).map(([label, value]) => (
+                  <div key={label} className="py-2.5 flex gap-4">
+                    <dt className="w-40 shrink-0 text-xs font-semibold text-gray-500 uppercase tracking-wide pt-0.5">{label}</dt>
+                    <dd className="text-sm text-brand-dark">
+                      {label === 'Status' ? (
+                        <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium"
+                          style={opModal.data.ativo === 1 ? { background: '#666', color: '#fff' } : { background: '#ddd', color: '#666' }}>
+                          {value}
+                        </span>
+                      ) : value}
+                    </dd>
+                  </div>
+                ))}
+              </dl>
+            ) : (
+              <div className="space-y-4">
+                <div>
+                  <label className="label">Código <span className="text-red-500">*</span></label>
+                  <input
+                    className="input-field"
+                    value={opForm.codigo}
+                    onChange={e => setOpForm(f => ({ ...f, codigo: e.target.value }))}
+                  />
+                  {opErrors.codigo && <p className="text-red-500 text-xs mt-1">{opErrors.codigo}</p>}
+                </div>
 
-              <div>
-                <label className="label">Tipo de Operação {!viewOnly && <span className="text-red-500">*</span>}</label>
-                {viewOnly ? (
-                  <input className="input-field" value={tipos.find(t => t.id === parseInt(opForm.tipo_id))?.nome ?? opForm.tipo_id} disabled />
-                ) : (
+                <div>
+                  <label className="label">Tipo de Operação <span className="text-red-500">*</span></label>
                   <select
                     className="input-field"
                     value={opForm.tipo_id}
@@ -291,35 +353,33 @@ export default function BackofficeOperacoes() {
                     <option value="">Selecionar...</option>
                     {tipos.map(t => <option key={t.id} value={t.id}>{t.nome}</option>)}
                   </select>
-                )}
-                {opErrors.tipo_id && <p className="text-red-500 text-xs mt-1">{opErrors.tipo_id}</p>}
-              </div>
+                  {opErrors.tipo_id && <p className="text-red-500 text-xs mt-1">{opErrors.tipo_id}</p>}
+                </div>
 
-              <div className="flex items-center gap-2">
-                <input
-                  type="checkbox"
-                  id="op-ativo"
-                  checked={opForm.ativo}
-                  onChange={e => setOpForm(f => ({ ...f, ativo: e.target.checked }))}
-                  disabled={viewOnly}
-                  className="w-4 h-4 accent-brand-primary"
-                />
-                <label htmlFor="op-ativo" className="text-sm text-brand-dark font-medium">Ativo</label>
-              </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="op-ativo"
+                    checked={opForm.ativo}
+                    onChange={e => setOpForm(f => ({ ...f, ativo: e.target.checked }))}
+                    className="w-4 h-4 accent-brand-primary"
+                  />
+                  <label htmlFor="op-ativo" className="text-sm text-brand-dark font-medium">Ativo</label>
+                </div>
 
-              <div>
-                <label className="label">Observações</label>
-                <textarea
-                  className="input-field resize-none"
-                  rows={3}
-                  value={opForm.observacoes}
-                  onChange={e => setOpForm(f => ({ ...f, observacoes: e.target.value }))}
-                  disabled={viewOnly}
-                />
-              </div>
+                <div>
+                  <label className="label">Observações</label>
+                  <textarea
+                    className="input-field resize-none"
+                    rows={3}
+                    value={opForm.observacoes}
+                    onChange={e => setOpForm(f => ({ ...f, observacoes: e.target.value }))}
+                  />
+                </div>
 
-              {opErrors.submit && <p className="text-red-500 text-xs">{opErrors.submit}</p>}
-            </div>
+                {opErrors.submit && <p className="text-red-500 text-xs">{opErrors.submit}</p>}
+              </div>
+            )}
 
             <div className="flex justify-end gap-2 mt-6">
               <button onClick={closeOpModal} className="btn-secondary">
@@ -358,10 +418,10 @@ export default function BackofficeOperacoes() {
       {/* Modal: Gestão de Tipos */}
       {tiposModal && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg border border-gray-200 w-full max-w-lg p-6 mx-4">
+          <div className="bg-white rounded-lg border border-gray-200 w-full max-w-6xl p-6 mx-4">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-brand-dark">Gestão de Tipos</h2>
-              <button onClick={() => { setShowNewTipo(true); setNewTipoNome(''); }} className="btn-primary text-xs">
+              <button onClick={() => { setShowNewTipo(true); setNewTipoNome(''); setNewTipoIntervalo(''); setNewTipoAtivo(true); }} className="btn-primary text-xs">
                 Novo Tipo
               </button>
             </div>
@@ -370,56 +430,93 @@ export default function BackofficeOperacoes() {
               <table className="w-full text-sm">
                 <thead>
                   <tr className="bg-gray-50 border-b border-gray-200">
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-brand-dark uppercase w-12">ID</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-brand-dark uppercase">Nome</th>
-                    <th className="px-3 py-2 text-left text-xs font-semibold text-brand-dark uppercase">Ações</th>
+                    {['Intervalo (kms)', 'Label', 'Ativo', 'Ordem', 'Códigos Associados', 'Ações'].map(h => (
+                      <th key={h} className="px-3 py-2 text-left text-xs font-semibold text-brand-dark uppercase whitespace-nowrap">{h}</th>
+                    ))}
                   </tr>
                 </thead>
                 <tbody>
-                  {tipos.map(t => (
+                  {tipos.map((t, i) => (
                     <tr key={t.id} className="border-b border-gray-100">
-                      <td className="px-3 py-2 text-xs text-gray-400">{t.id}</td>
-                      <td className="px-3 py-2">
-                        {tipoEditId === t.id ? (
-                          <div className="flex gap-1 items-center">
+                      {tipoEditId === t.id ? (
+                        <>
+                          <td className="px-3 py-2">
                             <input
-                              className="input-field text-xs py-1"
+                              className="input-field text-xs py-1 w-24"
+                              type="number"
+                              placeholder="ex: 15000"
+                              value={tipoEditIntervalo}
+                              onChange={e => setTipoEditIntervalo(e.target.value)}
+                            />
+                          </td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="input-field text-xs py-1 w-24"
+                              placeholder="ex: HEV"
                               value={tipoEditNome}
                               onChange={e => setTipoEditNome(e.target.value)}
                               onKeyDown={e => e.key === 'Enter' && handleTipoEditSave(t.id)}
                               autoFocus
                             />
-                            <button onClick={() => handleTipoEditSave(t.id)} className="btn-primary text-xs px-2 py-1">✓</button>
-                            <button onClick={() => setTipoEditId(null)} className="btn-secondary text-xs px-2 py-1">✕</button>
-                          </div>
-                        ) : (
-                          <span className="text-sm">{t.nome}</span>
-                        )}
-                      </td>
-                      <td className="px-3 py-2">
-                        <div className="flex gap-2">
-                          <button
-                            title="Editar"
-                            onClick={() => { setTipoEditId(t.id); setTipoEditNome(t.nome); }}
-                            className="text-gray-500 hover:text-brand-dark text-base"
-                          >✏</button>
-                          <button
-                            title="Eliminar"
-                            onClick={() => handleTipoDelete(t.id)}
-                            className="text-gray-500 hover:text-black text-base"
-                          >🗑</button>
-                        </div>
-                      </td>
+                          </td>
+                          <td className="px-3 py-2">
+                            <input type="checkbox" checked={tipoEditAtivo} onChange={e => setTipoEditAtivo(e.target.checked)} className="w-4 h-4 accent-brand-primary" />
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-400">{i + 1}</td>
+                          <td className="px-3 py-2 text-xs text-gray-400">{t.codigos_associados}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex gap-1">
+                              <button onClick={() => handleTipoEditSave(t.id)} className="btn-primary text-xs px-2 py-1">✓</button>
+                              <button onClick={() => setTipoEditId(null)} className="btn-secondary text-xs px-2 py-1">✕</button>
+                            </div>
+                          </td>
+                        </>
+                      ) : (
+                        <>
+                          <td className="px-3 py-2 text-xs">{t.intervalo_kms != null ? t.intervalo_kms.toLocaleString('pt-PT') : '-'}</td>
+                          <td className="px-3 py-2 text-sm font-medium">{t.nome}</td>
+                          <td className="px-3 py-2">
+                            {t.ativo === 1
+                              ? <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: '#666', color: '#fff' }}>Sim</span>
+                              : <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: '#ddd', color: '#666' }}>Não</span>
+                            }
+                          </td>
+                          <td className="px-3 py-2 text-xs text-gray-500">{i + 1}</td>
+                          <td className="px-3 py-2 text-xs text-gray-500">{t.codigos_associados}</td>
+                          <td className="px-3 py-2">
+                            <div className="flex gap-2">
+                              <button
+                                title="Editar"
+                                onClick={() => { setTipoEditId(t.id); setTipoEditNome(t.nome); setTipoEditIntervalo(t.intervalo_kms != null ? String(t.intervalo_kms) : ''); setTipoEditAtivo(t.ativo === 1); }}
+                                className="text-gray-500 hover:text-brand-dark text-base"
+                              >✏</button>
+                              <button
+                                title="Eliminar"
+                                onClick={() => handleTipoDelete(t.id)}
+                                className="text-gray-500 hover:text-black text-base"
+                              >🗑</button>
+                            </div>
+                          </td>
+                        </>
+                      )}
                     </tr>
                   ))}
 
                   {showNewTipo && (
                     <tr className="border-b border-gray-100 bg-gray-50">
-                      <td className="px-3 py-2 text-xs text-gray-400">—</td>
                       <td className="px-3 py-2">
                         <input
-                          className="input-field text-xs py-1"
-                          placeholder="Nome do tipo..."
+                          className="input-field text-xs py-1 w-24"
+                          type="number"
+                          placeholder="ex: 15000"
+                          value={newTipoIntervalo}
+                          onChange={e => setNewTipoIntervalo(e.target.value)}
+                        />
+                      </td>
+                      <td className="px-3 py-2">
+                        <input
+                          className="input-field text-xs py-1 w-24"
+                          placeholder="ex: HEV"
                           value={newTipoNome}
                           onChange={e => setNewTipoNome(e.target.value)}
                           onKeyDown={e => e.key === 'Enter' && handleTipoCreate()}
@@ -427,9 +524,14 @@ export default function BackofficeOperacoes() {
                         />
                       </td>
                       <td className="px-3 py-2">
+                        <input type="checkbox" checked={newTipoAtivo} onChange={e => setNewTipoAtivo(e.target.checked)} className="w-4 h-4 accent-brand-primary" />
+                      </td>
+                      <td className="px-3 py-2 text-xs text-gray-400">—</td>
+                      <td className="px-3 py-2 text-xs text-gray-400">—</td>
+                      <td className="px-3 py-2">
                         <div className="flex gap-1">
                           <button onClick={handleTipoCreate} className="btn-primary text-xs px-2 py-1">✓</button>
-                          <button onClick={() => { setShowNewTipo(false); setNewTipoNome(''); }} className="btn-secondary text-xs px-2 py-1">✕</button>
+                          <button onClick={() => { setShowNewTipo(false); setNewTipoNome(''); setNewTipoIntervalo(''); setNewTipoAtivo(true); }} className="btn-secondary text-xs px-2 py-1">✕</button>
                         </div>
                       </td>
                     </tr>
@@ -439,7 +541,7 @@ export default function BackofficeOperacoes() {
             </div>
 
             <div className="flex justify-end">
-              <button onClick={() => { setTiposModal(false); setTipoEditId(null); setShowNewTipo(false); }} className="btn-secondary">
+              <button onClick={() => { setTiposModal(false); setTipoEditId(null); setShowNewTipo(false); setNewTipoNome(''); setNewTipoIntervalo(''); setNewTipoAtivo(true); }} className="btn-secondary">
                 Fechar
               </button>
             </div>
