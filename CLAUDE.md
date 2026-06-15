@@ -20,11 +20,10 @@ npm run build      # tsc + vite build
 
 ### Install dependencies
 ```bash
-cd backend && npm install --strict-ssl false   # corporate proxy requires SSL bypass
+cd backend && npm install --strict-ssl false
 cd frontend && npm install --strict-ssl false
 ```
-
-> `--strict-ssl false` is required due to a self-signed certificate in the corporate network proxy.
+> `--strict-ssl false` is required — corporate network proxy uses a self-signed certificate.
 
 ### Reset the database
 Delete `backend/dsp.db` — it will be recreated with seed data on the next backend start.
@@ -33,40 +32,59 @@ Delete `backend/dsp.db` — it will be recreated with seed data on the next back
 
 ### Backend (`backend/src/`)
 
-**Database layer** — `src/db/database.ts`  
-Uses `sql.js` (WebAssembly SQLite) instead of `better-sqlite3` because the machine has no C++ build tools (no Python/MSBuild). The DB is loaded from `dsp.db` on disk into memory at startup, and `persist()` writes it back to disk after every `execute()` call. All query helpers (`queryAll`, `queryOne`, `execute`) accept `SqlValue[]` params — do not pass `unknown[]` directly or TypeScript will error.
+**Database layer** — `src/db/database.ts`
+Uses `sql.js` (WebAssembly SQLite) — no native build tools required. The DB is loaded from `dsp.db` into memory at startup; `persist()` writes it back to disk after every `execute()` call. Query helpers: `queryAll`, `queryOne`, `execute` — all accept `SqlValue[]` params. Schema is created in `initSchema()`, seed data in `seedIfEmpty()` and `seedOperacoesIfEmpty()`.
 
-**Routes** — one file per resource:
+**Schema migrations** — new columns on existing tables are added via `ALTER TABLE` wrapped in try/catch at the top of `initSchema()`, before the `CREATE TABLE IF NOT EXISTS` block. This handles both fresh and existing databases.
+
+**Routes** — one file per resource, all mounted in `src/index.ts`:
 - `vehicles.ts` — `GET /api/vehicles/search`, `GET /api/vehicles`, `POST /api/vehicles/upsert-bulk`
 - `dealers.ts` — `GET /api/dealers`, `GET /api/dealers/:codigo`
 - `services.ts` — CRUD on `revisoes` with JOIN to `concessoes` and `parque_circulante`
-- `pdf.ts` — `GET /api/revisoes/:vin/pdf` — generates PDF with pdfkit, streams directly to response
-- `upload.ts` — `POST /api/upload` — multer + xlsx parses XLSX/CSV, upserts into `parque_circulante`
-- `template.ts` — `GET /api/template` — streams a sample XLSX download
+- `pdf.ts` — `GET /api/revisoes/:vin/pdf` — streams PDF via pdfkit
+- `upload.ts` — `POST /api/upload` — multer + xlsx, upserts into `parque_circulante`; accepts `tipo_upload` field (Motordata / Novas Viaturas) in FormData
+- `template.ts` — `GET /api/template` — streams sample XLSX download
+- `operacoes.ts` — CRUD on `operacoes` and `tipos_operacao`:
+  - `GET/POST/PUT/DELETE /api/operacoes`
+  - `GET/POST/PUT/DELETE /api/tipos-operacao`
 
-**Auth** — there is no real auth. Two hardcoded mock users live in `frontend/src/context/AuthContext.tsx`. Role is persisted in `localStorage` and can be set via `?role=importador` or `?role=concessionario` URL param.
+**Auth** — no real auth. Two hardcoded mock users in `frontend/src/context/AuthContext.tsx`. Role is persisted in `localStorage` and switchable via `?role=importador` or `?role=concessionario` URL param.
 
 ### Frontend (`frontend/src/`)
 
-**Routing** — React Router v6. All unknown routes redirect to `/pesquisa`. The `Layout` wrapper in `App.tsx` renders `<Sidebar>` alongside every page.
+**Routing** — React Router v6, defined in `App.tsx`. All unknown routes redirect to `/pesquisa`. The `Layout` wrapper renders `<Sidebar>` alongside every page. `ImportadorOnly` guard redirects concessionários to `/pesquisa`.
 
-**Auth context** — `context/AuthContext.tsx` exposes `user` (role + nome + optional `codigo_concessao`) and `setRole`. The `concessionario` mock user is hardcoded to `codigo_concessao: '4711'`. Role-gating (e.g. hiding "Atualizar Viaturas") is done inline in components by reading `user.role`.
+**Routes:**
+- `/pesquisa` — `Pesquisa.tsx`
+- `/pesquisa/detalhe` — `DetalheRegisto.tsx` (receives record via `location.state`)
+- `/novo-registo` — `NovoRegisto.tsx`
+- `/atualizar-viaturas` — `AtualizarViaturas.tsx` (importador only)
+- `/backoffice/operacoes` — `BackofficeOperacoes.tsx` (importador only)
 
 **Pages:**
-- `Pesquisa` — search by matrícula or VIN, paginated results table, inline edit/delete rows, PDF download trigger
-- `NovoRegisto` — 3-step wizard: (1) vehicle lookup, (2) dealer selection (dropdown for importador, read-only for concessionario), (3) service data with motorização-dependent operation options
-- `AtualizarViaturas` — drag-and-drop file upload (importador only); shows insert/update/error summary
+- `Pesquisa` — search by matrícula or VIN, paginated table, inline edit/delete, PDF download, row click navigates to `DetalheRegisto`
+- `DetalheRegisto` — read-only detail view; data passed via React Router `location.state`
+- `NovoRegisto` — 3-step wizard: (1) vehicle lookup, (2) dealer selection, (3) service data with motorização-dependent operation options (hardcoded `EV_OPTIONS` / `PHEV_OPTIONS`)
+- `AtualizarViaturas` — drag-and-drop upload area; clicking opens a modal to select Tipo de Upload (Motordata / Novas Viaturas) and the file before submitting
+- `BackofficeOperacoes` — CRUD table for `operacoes` with pagination; separate modal for `tipos_operacao` management
 
-**Styling** — Tailwind CSS. Custom tokens defined in `tailwind.config.js`:
-- `brand.primary` = `#111111` (primary action colour — black)
-- `brand.dark` = `#1a1a1a` (text/header colour)
+**Data model for operacoes/tipos:**
+- `tipos_operacao`: `id`, `nome` (label e.g. PHEV/HEV), `intervalo_kms`, `ativo`, `created_at`
+- `operacoes`: `id`, `codigo` (e.g. `15000/1Ano`), `tipo_id`, `ativo`, `observacoes`, `created_at`, `updated_at`
+- `codigo` format is `{km}/{n}Ano(s)` — `formatCodigo()` in `BackofficeOperacoes.tsx` renders it as `15 000 Km / 1 Ano`
+
+**Auth context** — `context/AuthContext.tsx` exposes `user` (role + nome + optional `codigo_concessao`) and `setRole`. The `concessionario` mock user is hardcoded to `codigo_concessao: '02412'`. Role-gating is done inline in components via `user.role`.
+
+**Styling** — Tailwind CSS. Custom tokens in `tailwind.config.js`:
+- `brand.primary` = `#111111`
+- `brand.dark` = `#1a1a1a`
 
 Shared utility classes (`btn-primary`, `btn-secondary`, `input-field`, `label`) are defined in `src/index.css`.
 
-**API calls** — all frontend fetch calls use relative paths (`/api/...`). Vite proxies them to `http://localhost:3001` in dev (configured in `vite.config.ts`).
+**API calls** — all frontend fetches use relative paths (`/api/...`). Vite proxies to `http://localhost:3001` in dev (`vite.config.ts`).
 
 ## Key Constraints
 
-- `sql.js` keeps the entire DB in memory — not suitable for large datasets or concurrent writes in production. For production, migrate to PostgreSQL by replacing the three helpers in `database.ts`.
-- The `execute()` helper calls `persist()` (disk write) synchronously after every mutation. Batch inserts (e.g. bulk upload) call `execute()` per row, which is slow for large files.
-- EV service intervals are multiples of 24 months/30 000 km; PHEV are multiples of 12 months/15 000 km. These option lists are hardcoded in `NovoRegisto.tsx`.
+- `sql.js` keeps the entire DB in memory — not suitable for large datasets or concurrent writes. For production, replace the three helpers in `database.ts` with a PostgreSQL client.
+- `execute()` calls `persist()` (synchronous disk write) after every mutation. Bulk inserts are slow for large files because they call `execute()` per row.
+- EV operation options are hardcoded in `NovoRegisto.tsx` (`EV_OPTIONS` / `PHEV_OPTIONS`). The `operacoes` / `tipos_operacao` tables are used only in the backoffice, not yet wired into the wizard.
