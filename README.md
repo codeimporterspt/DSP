@@ -5,7 +5,7 @@ Sistema de registo de manutenção para viaturas.
 ## Stack
 
 - **Frontend:** React 18 + TypeScript + Tailwind CSS + Vite
-- **Backend:** Node.js + Express + TypeScript + better-sqlite3
+- **Backend:** Node.js + Express + TypeScript + sql.js (SQLite via WebAssembly)
 - **PDF:** pdfkit
 - **Auth:** Mock (toggle de role na sidebar)
 
@@ -14,9 +14,11 @@ Sistema de registo de manutenção para viaturas.
 ### 1. Instalar dependências
 
 ```bash
-cd backend && npm install
-cd ../frontend && npm install
+cd backend && npm install --strict-ssl false
+cd ../frontend && npm install --strict-ssl false
 ```
+
+> `--strict-ssl false` é necessário em redes corporativas com proxy de certificado auto-assinado.
 
 ### 2. Arrancar
 
@@ -45,8 +47,8 @@ Alternar role na sidebar (botões "Importador" / "Concess.") ou via URL:
 
 | Role | Nome | Acesso |
 |------|------|--------|
-| `importador` | Importador | Tudo, incluindo Atualizar Viaturas |
-| `concessionario` | M. & Costas Power | Pesquisa + Novo Registo |
+| `importador` | Importador | Tudo: Pesquisa, Novo Registo, Atualizar Viaturas, Backoffice Operações |
+| `concessionario` | M. & Costas Power (código 02412) | Pesquisa + Novo Registo (apenas na própria concessão) |
 
 ---
 
@@ -65,16 +67,22 @@ Alternar role na sidebar (botões "Importador" / "Concess.") ou via URL:
 | DELETE | `/api/revisoes/:id` | Eliminar revisão |
 | GET | `/api/revisoes/:vin/pdf` | Gerar PDF |
 | GET | `/api/template` | Download template XLSX |
-| POST | `/api/upload` | Upload XLSX/CSV de viaturas |
+| POST | `/api/upload` | Upload XLSX de viaturas (campo `tipo_upload`: `Motordata` ou `Novas Viaturas`) |
+| GET | `/api/operacoes` | Lista operações |
+| POST | `/api/operacoes` | Criar operação |
+| PUT | `/api/operacoes/:id` | Editar operação |
+| DELETE | `/api/operacoes/:id` | Eliminar operação |
+| GET | `/api/tipos-operacao` | Lista tipos de operação |
+| POST | `/api/tipos-operacao` | Criar tipo de operação |
+| PUT | `/api/tipos-operacao/:id` | Editar tipo de operação |
+| DELETE | `/api/tipos-operacao/:id` | Eliminar tipo de operação |
 
 ---
 
 ## Base de Dados
 
-SQLite auto-inicializada em `backend/dsp.db` na primeira execução, com dados de seed:
+SQLite (via `sql.js`) auto-inicializada em `backend/dsp.db` na primeira execução, com dados de seed. Para repor a base de dados, apagar o ficheiro `dsp.db` — é recriado no próximo arranque.
 
-- 3 viaturas (2× EV, 1× PHEV)
-- 3 concessionários (inclui M. & Costas Power - Braga, código 4711)
-- 4 registos de serviço
+Tabelas principais: `parque_circulante`, `concessoes`, `revisoes`, `operacoes`, `tipos_operacao`.
 
-O schema está preparado para migração para PostgreSQL (sem features SQLite-específicas além do `AUTOINCREMENT`).
+> **Nota:** `sql.js` carrega a BD inteira em memória — não adequado para grandes volumes ou escritas concorrentes. Para produção, substituir os helpers em `database.ts` por um cliente PostgreSQL.
