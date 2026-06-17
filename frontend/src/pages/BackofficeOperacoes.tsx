@@ -6,6 +6,7 @@ interface TipoOperacao {
   nome: string;
   intervalo_kms: number | null;
   ativo: number;
+  ordem: number;
   codigos_associados: number;
   created_at: string;
 }
@@ -67,10 +68,12 @@ export default function BackofficeOperacoes() {
   const [tipoEditNome, setTipoEditNome] = useState('');
   const [tipoEditIntervalo, setTipoEditIntervalo] = useState('');
   const [tipoEditAtivo, setTipoEditAtivo] = useState(true);
+  const [tipoEditOrdem, setTipoEditOrdem] = useState('1');
   const [showNewTipo, setShowNewTipo] = useState(false);
   const [newTipoNome, setNewTipoNome] = useState('');
   const [newTipoIntervalo, setNewTipoIntervalo] = useState('');
   const [newTipoAtivo, setNewTipoAtivo] = useState(true);
+  const [newTipoOrdem, setNewTipoOrdem] = useState('1');
 
   // Delete confirm
   const [deleteId, setDeleteId] = useState<number | null>(null);
@@ -171,12 +174,14 @@ export default function BackofficeOperacoes() {
         nome: newTipoNome.trim(),
         intervalo_kms: newTipoIntervalo ? parseInt(newTipoIntervalo, 10) : null,
         ativo: newTipoAtivo,
+        ordem: newTipoOrdem ? parseInt(newTipoOrdem, 10) : 1,
       }),
     });
     if (!res.ok) { const e = await res.json(); alert(e.error); return; }
     setNewTipoNome('');
     setNewTipoIntervalo('');
     setNewTipoAtivo(true);
+    setNewTipoOrdem('1');
     setShowNewTipo(false);
     loadTipos();
   };
@@ -190,6 +195,7 @@ export default function BackofficeOperacoes() {
         nome: tipoEditNome.trim(),
         intervalo_kms: tipoEditIntervalo ? parseInt(tipoEditIntervalo, 10) : null,
         ativo: tipoEditAtivo,
+        ordem: tipoEditOrdem ? parseInt(tipoEditOrdem, 10) : 1,
       }),
     });
     if (!res.ok) { const e = await res.json(); alert(e.error); return; }
@@ -421,7 +427,7 @@ export default function BackofficeOperacoes() {
           <div className="bg-white rounded-lg border border-gray-200 w-full max-w-6xl p-6 mx-4">
             <div className="flex items-center justify-between mb-5">
               <h2 className="text-lg font-bold text-brand-dark">Gestão de Tipos</h2>
-              <button onClick={() => { setShowNewTipo(true); setNewTipoNome(''); setNewTipoIntervalo(''); setNewTipoAtivo(true); }} className="btn-primary text-xs">
+              <button onClick={() => { setShowNewTipo(true); setNewTipoNome(''); setNewTipoIntervalo(''); setNewTipoAtivo(true); setNewTipoOrdem('1'); }} className="btn-primary text-xs">
                 Novo Tipo
               </button>
             </div>
@@ -462,7 +468,17 @@ export default function BackofficeOperacoes() {
                           <td className="px-3 py-2">
                             <input type="checkbox" checked={tipoEditAtivo} onChange={e => setTipoEditAtivo(e.target.checked)} className="w-4 h-4 accent-brand-primary" />
                           </td>
-                          <td className="px-3 py-2 text-xs text-gray-400">{i + 1}</td>
+                          <td className="px-3 py-2">
+                            <input
+                              className="input-field text-xs py-1 w-16"
+                              type="number"
+                              min={1}
+                              placeholder="ex: 1"
+                              value={tipoEditOrdem}
+                              onChange={e => setTipoEditOrdem(e.target.value)}
+                              onKeyDown={e => e.key === 'Enter' && handleTipoEditSave(t.id)}
+                            />
+                          </td>
                           <td className="px-3 py-2 text-xs text-gray-400">{t.codigos_associados}</td>
                           <td className="px-3 py-2">
                             <div className="flex gap-1">
@@ -481,13 +497,13 @@ export default function BackofficeOperacoes() {
                               : <span className="inline-block px-2 py-0.5 rounded-full text-xs font-medium" style={{ background: '#ddd', color: '#666' }}>Não</span>
                             }
                           </td>
-                          <td className="px-3 py-2 text-xs text-gray-500">{i + 1}</td>
+                          <td className="px-3 py-2 text-xs text-gray-500">{t.ordem}</td>
                           <td className="px-3 py-2 text-xs text-gray-500">{t.codigos_associados}</td>
                           <td className="px-3 py-2">
                             <div className="flex gap-2">
                               <button
                                 title="Editar"
-                                onClick={() => { setTipoEditId(t.id); setTipoEditNome(t.nome); setTipoEditIntervalo(t.intervalo_kms != null ? String(t.intervalo_kms) : ''); setTipoEditAtivo(t.ativo === 1); }}
+                                onClick={() => { setTipoEditId(t.id); setTipoEditNome(t.nome); setTipoEditIntervalo(t.intervalo_kms != null ? String(t.intervalo_kms) : ''); setTipoEditAtivo(t.ativo === 1); setTipoEditOrdem(String(t.ordem ?? 1)); }}
                                 className="text-gray-500 hover:text-brand-dark text-base"
                               >✏</button>
                               <button
@@ -526,7 +542,17 @@ export default function BackofficeOperacoes() {
                       <td className="px-3 py-2">
                         <input type="checkbox" checked={newTipoAtivo} onChange={e => setNewTipoAtivo(e.target.checked)} className="w-4 h-4 accent-brand-primary" />
                       </td>
-                      <td className="px-3 py-2 text-xs text-gray-400">—</td>
+                      <td className="px-3 py-2">
+                        <input
+                          className="input-field text-xs py-1 w-16"
+                          type="number"
+                          min={1}
+                          placeholder="ex: 1"
+                          value={newTipoOrdem}
+                          onChange={e => setNewTipoOrdem(e.target.value)}
+                          onKeyDown={e => e.key === 'Enter' && handleTipoCreate()}
+                        />
+                      </td>
                       <td className="px-3 py-2 text-xs text-gray-400">—</td>
                       <td className="px-3 py-2">
                         <div className="flex gap-1">

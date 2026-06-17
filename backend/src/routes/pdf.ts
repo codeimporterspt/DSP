@@ -15,23 +15,40 @@ router.get('/:vin/pdf', (req: Request, res: Response) => {
     FROM revisoes r
     LEFT JOIN concessoes c ON c.codigo_concessao = r.codigo_concessao
     WHERE r.vin = ?
-    ORDER BY r.data_servico DESC
+    ORDER BY r.data_servico DESC, r.quilometros DESC
   `, [vin]);
 
   const today = new Date().toISOString().split('T')[0];
   const filename = `DSP_${vin}_${today}.pdf`;
 
-  // services ordered DESC — index 0 is most recent
+  // services ordered DESC by data_servico — index 0 is most recent
   const mostRecent = services.length > 0 ? services[0] : null;
   let nextMaintenanceNote: string | null = null;
   if (mostRecent) {
-    const isEV = vehicle.motorizacao === 'EV';
-    const kmInterval = isEV ? 30000 : 15000;
-    const monthInterval = isEV ? 24 : 12;
-    const nextKm = Number(mostRecent.quilometros) + kmInterval;
+    const kmInterval = vehicle.motorizacao === 'EV' ? 30000 : 15000;
+
+    // Year interval comes from tipos_operacao.ordem, matched by km interval
+    const tipoRow = queryOne<{ ordem: number }>(
+      'SELECT ordem FROM tipos_operacao WHERE intervalo_kms = ? AND ativo = 1 LIMIT 1',
+      [kmInterval]
+    );
+    const yearInterval = tipoRow?.ordem ?? (vehicle.motorizacao === 'EV' ? 2 : 1);
+
+    // Parse scheduled km from tipo_operacao — handles "30.000 Km" and "15 000 Km" formats
+    const kmMatch = String(mostRecent.tipo_operacao).match(/(\d{1,3}(?:[.\s]\d{3})*)\s*Km/i);
+    const scheduledKm = kmMatch ? parseInt(kmMatch[1].replace(/[\s.]/g, ''), 10) : null;
+    const actualKm = Number(mostRecent.quilometros);
+
+    // If done early (actual < scheduled), next = actual + interval
+    // If done late  (actual ≥ scheduled), next = scheduled + interval (stays on the planned cadence)
+    const baseKm = scheduledKm !== null ? Math.min(actualKm, scheduledKm) : actualKm;
+    const nextKm = baseKm + kmInterval;
+
+    // Next date: last service date + yearInterval years
     const lastDate = new Date(mostRecent.data_servico);
-    lastDate.setMonth(lastDate.getMonth() + monthInterval);
+    lastDate.setFullYear(lastDate.getFullYear() + yearInterval);
     const [ny, nm, nd] = lastDate.toISOString().split('T')[0].split('-');
+
     const nextKmFormatted = nextKm.toLocaleString('pt-PT');
     nextMaintenanceNote = `A próxima manutenção deverá ser efetuada aos ${nextKmFormatted} Km ou a ${nd}/${nm}/${ny} (conforme ocorrer primeiro).`;
   }
@@ -42,7 +59,6 @@ router.get('/:vin/pdf', (req: Request, res: Response) => {
   const doc = new PDFDocument({ margin: 40, size: 'A4' });
   doc.pipe(res);
 
-  const RED = '#111111';
   const DARK = '#4E5356';
   const LIGHT_GREY = '#F2F2F2';
   const pageWidth = doc.page.width - 80;
@@ -51,9 +67,6 @@ router.get('/:vin/pdf', (req: Request, res: Response) => {
   doc.rect(40, 40, pageWidth, 60).fill(DARK);
   doc.fillColor('white').fontSize(16).font('Helvetica-Bold')
     .text('Registo Digital de Revisões', 55, 58);
-  doc.fillColor(RED).fontSize(22).font('Helvetica-Bold')
-    .text('DSP', 40 + pageWidth - 60, 52);
-
   // Vehicle info box
   const boxY = 120;
   doc.rect(40, boxY, pageWidth, 70).strokeColor(DARK).lineWidth(1).stroke();

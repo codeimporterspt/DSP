@@ -27,6 +27,8 @@ export async function initDb(): Promise<void> {
   initSchema();
   seedIfEmpty();
   seedOperacoesIfEmpty();
+  // Ensure HEV has ordem=2 on existing DBs that got the default of 1
+  _db!.run("UPDATE tipos_operacao SET ordem = 2 WHERE UPPER(nome) = 'HEV' AND ordem = 1");
   persist();
   console.log('Database initialized at', DB_PATH);
 }
@@ -35,6 +37,7 @@ function initSchema() {
   // Migrations for existing DBs
   try { _db!.run("ALTER TABLE tipos_operacao ADD COLUMN intervalo_kms INTEGER"); } catch {}
   try { _db!.run("ALTER TABLE tipos_operacao ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1"); } catch {}
+  try { _db!.run("ALTER TABLE tipos_operacao ADD COLUMN ordem INTEGER NOT NULL DEFAULT 1"); } catch {}
 
   _db!.run(`
     CREATE TABLE IF NOT EXISTS parque_circulante (
@@ -122,8 +125,8 @@ function seedOperacoesIfEmpty() {
   const count = (res[0]?.values[0]?.[0] as number) ?? 0;
   if (count > 0) return;
   _db!.run(`
-    INSERT INTO tipos_operacao (nome, intervalo_kms, ativo) VALUES
-      ('PHEV', 15000, 1), ('HEV', 30000, 1);
+    INSERT INTO tipos_operacao (nome, intervalo_kms, ativo, ordem) VALUES
+      ('PHEV', 15000, 1, 1), ('HEV', 30000, 1, 2);
     INSERT INTO operacoes (codigo, tipo_id, ativo, observacoes) VALUES
       ('15000/1Ano',   1, 1, '15 000 Km / 1 Ano'),
       ('30000/2Anos',  1, 1, '30 000 Km / 2 Anos'),

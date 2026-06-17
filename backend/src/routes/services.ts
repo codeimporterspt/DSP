@@ -61,6 +61,22 @@ router.post('/', (req: Request, res: Response) => {
   const dealer = queryOne('SELECT id FROM concessoes WHERE codigo_concessao = ?', [codigo_concessao]);
   if (!dealer) { res.status(404).json({ error: 'Concessionário não encontrado' }); return; }
 
+  const dupTipo = queryOne('SELECT id FROM revisoes WHERE vin = ? AND tipo_operacao = ?', [vin, tipo_operacao]);
+  if (dupTipo) {
+    res.status(409).json({ error: `Já existe um registo do tipo "${tipo_operacao}" para esta viatura.` });
+    return;
+  }
+
+  const higherKm = queryOne<{ quilometros: number }>(
+    'SELECT quilometros FROM revisoes WHERE vin = ? AND quilometros >= ? ORDER BY quilometros DESC LIMIT 1',
+    [vin, quilometros]
+  );
+  if (higherKm) {
+    const existing = Number(higherKm.quilometros).toLocaleString('pt-PT');
+    res.status(409).json({ error: `Já existe um registo com ${existing} Km para esta viatura. O novo registo deve ter uma quilometragem superior.` });
+    return;
+  }
+
   const result = execute(
     'INSERT INTO revisoes (vin, matricula, codigo_concessao, data_servico, quilometros, tipo_operacao) VALUES (?, ?, ?, ?, ?, ?)',
     [vin, matricula, codigo_concessao, data_servico, quilometros, tipo_operacao]
@@ -92,6 +108,16 @@ router.put('/:id', (req: Request, res: Response) => {
   );
 
   res.json({ success: true });
+});
+
+router.delete('/bulk', (req: Request, res: Response) => {
+  const { ids } = req.body as { ids: number[] };
+  if (!Array.isArray(ids) || ids.length === 0) {
+    res.status(400).json({ error: 'Lista de ids inválida' }); return;
+  }
+  const placeholders = ids.map(() => '?').join(',');
+  const result = execute(`DELETE FROM revisoes WHERE id IN (${placeholders})`, ids as SqlValue[]);
+  res.json({ deleted: result.changes });
 });
 
 router.delete('/:id', (req: Request, res: Response) => {

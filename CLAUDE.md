@@ -45,13 +45,14 @@ Schema is created in `initSchema()`, seed data in `seedIfEmpty()` and `seedOpera
 **Routes** — one file per resource, all mounted in `src/index.ts`:
 - `vehicles.ts` — `GET /api/vehicles/search`, `GET /api/vehicles`, `POST /api/vehicles/upsert-bulk`
 - `dealers.ts` — `GET /api/dealers`, `GET /api/dealers/:codigo`
-- `services.ts` — CRUD on `revisoes` with JOIN to `concessoes` and `parque_circulante`; `GET` response includes full vehicle and dealer fields
-- `pdf.ts` — `GET /api/revisoes/:vin/pdf` — streams PDF via pdfkit
+- `services.ts` — CRUD on `revisoes` with JOIN to `concessoes` and `parque_circulante`; `GET` response includes full vehicle and dealer fields. `DELETE /bulk` (body `{ ids: number[] }`) deletes multiple records in a single `WHERE id IN (...)` query and must be declared **before** `DELETE /:id` in the router. `POST /` validates: no duplicate `tipo_operacao` per VIN; new `quilometros` must exceed all existing records for that VIN.
+- `pdf.ts` — `GET /api/revisoes/:vin/pdf` — streams PDF via pdfkit; header bar is dark grey with white title only (no logo/text in the corner). Services are ordered `data_servico DESC, quilometros DESC` (tiebreaker by km ensures the highest-mileage record wins when two share the same date). The "next maintenance" km is calculated as `min(actualKm, scheduledKm) + kmInterval`, where `scheduledKm` is parsed from `tipo_operacao` using `/(\d{1,3}(?:[.\s]\d{3})*)\s*Km/i` — this regex handles both `"30.000 Km"` (old seed format) and `"15 000 Km"` (backoffice `observacoes` format). The year interval comes from `tipos_operacao.ordem`.
 - `upload.ts` — `POST /api/upload` — multer (5 MB limit) + xlsx, upserts into `parque_circulante`. **`motorizacao` is never overwritten on upsert** — it preserves the existing value or defaults to `'EV'` for new rows. The `tipo_upload` field sent by the frontend (`Motordata` / `Novas Viaturas`) is received but currently unused by the backend.
 - `template.ts` — `GET /api/template` — streams sample XLSX download
 - `operacoes.ts` — CRUD on `operacoes` and `tipos_operacao`:
-  - `GET/POST/PUT/DELETE /api/operacoes`
-  - `GET/POST/PUT/DELETE /api/tipos-operacao`
+  - `GET /api/operacoes?page&limit&tipo_id&ativo` — `tipo_id` and `ativo` are optional filters; `limit` max is 200
+  - `POST/PUT/DELETE /api/operacoes`
+  - `GET/POST/PUT/DELETE /api/tipos-operacao` — `tipos_operacao` has an `ordem` column (integer, year interval for next maintenance: PHEV=1, HEV=2); editable in the Backoffice UI
 - Health check: `GET /api/health` → `{ status: 'ok' }`
 
 CORS is restricted to `http://localhost:5173`.
@@ -68,9 +69,9 @@ CORS is restricted to `http://localhost:5173`.
 - `/backoffice/operacoes` — `BackofficeOperacoes.tsx` (importador only)
 
 **Pages:**
-- `Pesquisa` — search by matrícula or VIN, paginated table, inline edit/delete, PDF download, row click navigates to `DetalheRegisto`
+- `Pesquisa` — search by matrícula or VIN, paginated table, inline edit/delete, bulk delete (checkbox selection + confirmation modal), PDF download, row click navigates to `DetalheRegisto`. Permission helper `canDelete(r)` gates both the individual delete button and the bulk-select checkbox: importador can delete all; concessionário can only delete records where `codigo_concessao === user.codigo_concessao`.
 - `DetalheRegisto` — read-only detail view; data passed via React Router `location.state`
-- `NovoRegisto` — 3-step wizard: (1) vehicle lookup, (2) dealer selection, (3) service data. In step 2, concessionários auto-select their own dealer via `GET /api/dealers/:codigo` and skip the dropdown. Operation options are hardcoded constants `EV_OPTIONS` / `PHEV_OPTIONS` — **not loaded from the `operacoes` table**.
+- `NovoRegisto` — 3-step wizard: (1) vehicle lookup, (2) dealer selection, (3) service data. In step 2, concessionários auto-select their own dealer via `GET /api/dealers/:codigo` and skip the dropdown. On reaching step 3, the wizard fetches `/api/tipos-operacao` to find the `tipo_id` whose `intervalo_kms` matches the vehicle's motorizacao (EV→30 000, PHEV→15 000), then fetches `/api/operacoes?tipo_id=X&ativo=1` to populate the operation dropdown. The stored `tipo_operacao` value is `operacoes.observacoes`.
 - `AtualizarViaturas` — drag-and-drop upload area; clicking opens a modal to select Tipo de Upload (Motordata / Novas Viaturas) and the file before submitting
 - `BackofficeOperacoes` — CRUD table for `operacoes` with pagination; separate modal for `tipos_operacao` management
 
@@ -99,5 +100,5 @@ Shared utility classes (`btn-primary`, `btn-secondary`, `input-field`, `label`) 
 
 - `sql.js` keeps the entire DB in memory — not suitable for large datasets or concurrent writes. For production, replace the three helpers in `database.ts` with a PostgreSQL client.
 - `execute()` calls `persist()` (synchronous disk write) after every mutation. Bulk inserts are slow for large files because they call `execute()` per row.
-- `EV_OPTIONS` / `PHEV_OPTIONS` in `NovoRegisto.tsx` are hardcoded strings. The `operacoes` / `tipos_operacao` tables are managed in the backoffice but not yet wired into the wizard — connecting them requires fetching from the API and replacing these constants.
+- The motorizacao→tipo mapping in `NovoRegisto` is implicit: EV vehicles fetch the `tipos_operacao` row where `intervalo_kms = 30000`, PHEV where `intervalo_kms = 15000`. If new tipos are added with different intervals, the wizard won't pick them up automatically.
 - `parque_circulante.motorizacao` has a `CHECK(motorizacao IN ('EV','PHEV'))` constraint. The upload route never sets it on update, so changing a vehicle's motorização requires a manual DB edit or a dedicated endpoint.

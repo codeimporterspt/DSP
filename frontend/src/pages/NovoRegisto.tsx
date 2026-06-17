@@ -23,22 +23,11 @@ interface Dealer {
   pais: string;
 }
 
-const EV_OPTIONS = [
-  '24 meses ou 30.000 Km',
-  '48 meses ou 60.000 Km',
-  '72 meses ou 90.000 Km',
-  '96 meses ou 120.000 Km',
-  '120 meses ou 150.000 Km',
-];
-
-const PHEV_OPTIONS = [
-  '12 meses ou 15.000 Km',
-  '24 meses ou 30.000 Km',
-  '36 meses ou 45.000 Km',
-  '48 meses ou 60.000 Km',
-  '60 meses ou 75.000 Km',
-  '72 meses ou 90.000 Km',
-];
+interface Operacao {
+  id: number;
+  codigo: string;
+  observacoes: string | null;
+}
 
 export default function NovoRegisto() {
   const { user } = useAuth();
@@ -60,6 +49,7 @@ export default function NovoRegisto() {
   const [dataServico, setDataServico] = useState(() => new Date().toISOString().split('T')[0]);
   const [quilometros, setQuilometros] = useState('');
   const [tipoOperacao, setTipoOperacao] = useState('');
+  const [operacoes, setOperacoes] = useState<Operacao[]>([]);
 
   useEffect(() => {
     if (step === 2) {
@@ -71,7 +61,19 @@ export default function NovoRegisto() {
         });
       }
     }
-  }, [step, user]);
+    if (step === 3 && vehicle) {
+      const kmInterval = vehicle.motorizacao === 'EV' ? 30000 : 15000;
+      fetch('/api/tipos-operacao')
+        .then(r => r.json())
+        .then((tipos: Array<{ id: number; intervalo_kms: number; ativo: number }>) => {
+          const tipo = tipos.find(t => t.intervalo_kms === kmInterval && t.ativo === 1);
+          if (!tipo) return;
+          fetch(`/api/operacoes?tipo_id=${tipo.id}&ativo=1&limit=200`)
+            .then(r => r.json())
+            .then(data => setOperacoes(data.data ?? []));
+        });
+    }
+  }, [step, user, vehicle]);
 
   const handleVehicleSearch = async () => {
     if (!searchMat.trim() && !searchVin.trim()) return;
@@ -121,8 +123,6 @@ export default function NovoRegisto() {
     }
   };
 
-  const operacaoOptions = vehicle?.motorizacao === 'PHEV' ? PHEV_OPTIONS : EV_OPTIONS;
-
   return (
     <div className="p-6">
       <Breadcrumb />
@@ -152,12 +152,14 @@ export default function NovoRegisto() {
               <div>
                 <label className="label">Matrícula</label>
                 <input className="input-field" placeholder="Ex: 00-AA-01" value={searchMat}
-                  onChange={e => setSearchMat(e.target.value)} />
+                  onChange={e => setSearchMat(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { vehicle ? setStep(2) : handleVehicleSearch(); } }} />
               </div>
               <div>
                 <label className="label">VIN</label>
                 <input className="input-field" placeholder="Ex: LGXCE4CB4P2000001" value={searchVin}
-                  onChange={e => setSearchVin(e.target.value)} />
+                  onChange={e => setSearchVin(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter') { vehicle ? setStep(2) : handleVehicleSearch(); } }} />
               </div>
             </div>
             <div className="flex gap-2 mb-6">
@@ -267,6 +269,7 @@ export default function NovoRegisto() {
                   placeholder="Km's atuais"
                   value={quilometros}
                   onChange={e => setQuilometros(e.target.value)}
+                  onKeyDown={e => { if (e.key === 'Enter' && !submitting && dataServico && quilometros && tipoOperacao) handleSubmit(); }}
                   min={0}
                 />
               </div>
@@ -281,9 +284,10 @@ export default function NovoRegisto() {
                   onChange={e => setTipoOperacao(e.target.value)}
                 >
                   <option value="">-- Selecione --</option>
-                  {operacaoOptions.map(o => (
-                    <option key={o} value={o}>{o}</option>
-                  ))}
+                  {operacoes.map(o => {
+                    const label = o.observacoes ?? o.codigo;
+                    return <option key={o.id} value={label}>{label}</option>;
+                  })}
                 </select>
               </div>
             </div>

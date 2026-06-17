@@ -41,6 +41,8 @@ export default function Pesquisa() {
   const [loading, setLoading] = useState(false);
   const [editState, setEditState] = useState<EditState | null>(null);
   const [deleteConfirm, setDeleteConfirm] = useState<number | null>(null);
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set());
+  const [bulkDeleteConfirm, setBulkDeleteConfirm] = useState(false);
   const navigate = useNavigate();
   const { user } = useAuth();
 
@@ -58,13 +60,14 @@ export default function Pesquisa() {
       setResults(data.data ?? []);
       setTotal(data.total ?? 0);
       setPage(p);
+      setSelectedIds(new Set());
     } finally {
       setLoading(false);
     }
   }, [matricula, vin]);
 
   const handleSearch = () => { setPage(1); doSearch(1); };
-  const handleClear = () => { setMatricula(''); setVin(''); setResults(null); setTotal(0); setPage(1); };
+  const handleClear = () => { setMatricula(''); setVin(''); setResults(null); setTotal(0); setPage(1); setSelectedIds(new Set()); };
 
   const handleGeneratePdf = async () => {
     const searchVin = vin.trim() || results?.[0]?.vin;
@@ -82,10 +85,47 @@ export default function Pesquisa() {
     URL.revokeObjectURL(url);
   };
 
+  const canDelete = (r: ServiceRecord) =>
+    user.role === 'importador' || r.codigo_concessao === user.codigo_concessao;
+
   const handleDelete = async (id: number) => {
     await fetch(`/api/revisoes/${id}`, { method: 'DELETE' });
     doSearch(page);
     setDeleteConfirm(null);
+  };
+
+  const handleBulkDelete = async () => {
+    const ids = Array.from(selectedIds);
+    await fetch('/api/revisoes/bulk', {
+      method: 'DELETE',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ ids }),
+    });
+    setBulkDeleteConfirm(false);
+    doSearch(page);
+  };
+
+  const toggleSelect = (id: number) => {
+    setSelectedIds(prev => {
+      const next = new Set(prev);
+      if (next.has(id)) next.delete(id); else next.add(id);
+      return next;
+    });
+  };
+
+  const selectableIds = (results ?? []).filter(canDelete).map(r => r.id);
+  const allSelected = selectableIds.length > 0 && selectableIds.every(id => selectedIds.has(id));
+
+  const toggleSelectAll = () => {
+    if (allSelected) {
+      setSelectedIds(prev => {
+        const next = new Set(prev);
+        selectableIds.forEach(id => next.delete(id));
+        return next;
+      });
+    } else {
+      setSelectedIds(prev => new Set([...prev, ...selectableIds]));
+    }
   };
 
   const handleEditSave = async () => {
@@ -158,15 +198,31 @@ export default function Pesquisa() {
                   <span className="font-semibold text-brand-dark">{Math.min(page * PAGE_SIZE, total)}</span> de{' '}
                   <span className="font-semibold text-brand-dark">{total}</span> Registos
                 </p>
-                <button onClick={handleGeneratePdf} className="btn-primary text-xs">
-                  Gerar Ficheiro
-                </button>
+                <div className="flex gap-2">
+                  {selectedIds.size > 0 && (
+                    <button onClick={() => setBulkDeleteConfirm(true)} className="btn-secondary text-xs text-red-600 border-red-300 hover:bg-red-50">
+                      Eliminar selecionados ({selectedIds.size})
+                    </button>
+                  )}
+                  <button onClick={handleGeneratePdf} className="btn-primary text-xs">
+                    Gerar Ficheiro
+                  </button>
+                </div>
               </div>
 
               <div className="overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="bg-gray-50 border-b border-gray-200">
+                      <th className="px-4 py-3 w-8">
+                        <input
+                          type="checkbox"
+                          checked={allSelected}
+                          onChange={toggleSelectAll}
+                          className="cursor-pointer"
+                          title="Selecionar todos"
+                        />
+                      </th>
                       {['Matrícula', 'VIN', 'Modelo', 'Código CSS', 'Concessionário', 'Tipo de Operações', 'Quilómetros', 'Data de Serviço', 'Ação'].map(h => (
                         <th key={h} className="px-4 py-3 text-left text-xs font-semibold text-brand-dark uppercase tracking-wide whitespace-nowrap">{h}</th>
                       ))}
@@ -176,6 +232,17 @@ export default function Pesquisa() {
                     {results.map(r => (
                       <React.Fragment key={r.id}>
                         <tr className="border-b border-gray-100 hover:bg-gray-50 transition-colors">
+                          <td className="px-4 py-3 w-8">
+                            {canDelete(r) && (
+                              <input
+                                type="checkbox"
+                                checked={selectedIds.has(r.id)}
+                                onChange={() => toggleSelect(r.id)}
+                                onClick={e => e.stopPropagation()}
+                                className="cursor-pointer"
+                              />
+                            )}
+                          </td>
                           <td className="px-4 py-3 font-medium">{r.matricula}</td>
                           <td className="px-4 py-3 text-xs text-gray-600 font-mono">{r.vin}</td>
                           <td className="px-4 py-3 text-xs">{r.veiculo_modelo ?? '-'}</td>
@@ -208,7 +275,7 @@ export default function Pesquisa() {
                         </tr>
                         {editState?.id === r.id && (
                           <tr className="bg-blue-50 border-b border-blue-100">
-                            <td colSpan={9} className="px-4 py-4">
+                            <td colSpan={10} className="px-4 py-4">
                               <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 mb-3">
                                 <div>
                                   <label className="label">Data de Serviço</label>
@@ -240,7 +307,7 @@ export default function Pesquisa() {
                         )}
                         {deleteConfirm === r.id && (
                           <tr className="bg-gray-100 border-b border-gray-200">
-                            <td colSpan={9} className="px-4 py-3">
+                            <td colSpan={10} className="px-4 py-3">
                               <p className="text-sm text-gray-700 mb-2">Tem a certeza que deseja eliminar este registo?</p>
                               <div className="flex gap-2">
                                 <button onClick={() => handleDelete(r.id)} className="btn-primary text-xs">Eliminar</button>
@@ -273,6 +340,21 @@ export default function Pesquisa() {
               )}
             </>
           )}
+        </div>
+      )}
+
+      {bulkDeleteConfirm && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-50">
+          <div className="bg-white rounded-lg border border-gray-200 w-full max-w-sm p-6 mx-4">
+            <h2 className="text-base font-bold text-brand-dark mb-3">Eliminar registos</h2>
+            <p className="text-sm text-gray-600 mb-5">
+              Tem a certeza que deseja eliminar <span className="font-semibold">{selectedIds.size}</span> registo{selectedIds.size !== 1 ? 's' : ''}? Esta ação não pode ser revertida.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button onClick={() => setBulkDeleteConfirm(false)} className="btn-secondary text-xs">Cancelar</button>
+              <button onClick={handleBulkDelete} className="btn-primary text-xs bg-red-600 border-red-600 hover:bg-red-700">Eliminar</button>
+            </div>
+          </div>
         </div>
       )}
     </div>

@@ -4,23 +4,32 @@ import { queryAll, queryOne, execute } from '../db/database';
 
 const router = Router();
 
-// GET /api/operacoes?page=1&limit=10
+// GET /api/operacoes?page=1&limit=10&tipo_id=1&ativo=1
 router.get('/operacoes', (req: Request, res: Response) => {
-  const { page = '1', limit = '10' } = req.query as { page?: string; limit?: string };
+  const { page = '1', limit = '10', tipo_id, ativo } = req.query as {
+    page?: string; limit?: string; tipo_id?: string; ativo?: string;
+  };
   const pageNum = Math.max(1, parseInt(page, 10));
-  const limitNum = Math.min(100, Math.max(1, parseInt(limit, 10)));
+  const limitNum = Math.min(200, Math.max(1, parseInt(limit, 10)));
   const offset = (pageNum - 1) * limitNum;
 
-  const countRow = queryOne<{ c: number }>('SELECT COUNT(*) as c FROM operacoes');
+  const conditions: string[] = [];
+  const params: SqlValue[] = [];
+  if (tipo_id) { conditions.push('o.tipo_id = ?'); params.push(Number(tipo_id)); }
+  if (ativo !== undefined) { conditions.push('o.ativo = ?'); params.push(ativo === '1' ? 1 : 0); }
+  const where = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+
+  const countRow = queryOne<{ c: number }>(`SELECT COUNT(*) as c FROM operacoes o ${where}`, params);
   const total = countRow?.c ?? 0;
 
   const rows = queryAll(`
     SELECT o.id, o.codigo, o.tipo_id, t.nome as tipo_nome, o.ativo, o.observacoes, o.created_at, o.updated_at
     FROM operacoes o
     LEFT JOIN tipos_operacao t ON t.id = o.tipo_id
+    ${where}
     ORDER BY o.id
     LIMIT ? OFFSET ?
-  `, [limitNum, offset] as SqlValue[]);
+  `, [...params, limitNum, offset] as SqlValue[]);
 
   res.json({ total, page: pageNum, limit: limitNum, data: rows });
 });
@@ -83,7 +92,7 @@ router.delete('/operacoes/:id', (req: Request, res: Response) => {
 // GET /api/tipos-operacao
 router.get('/tipos-operacao', (_req: Request, res: Response) => {
   const rows = queryAll(`
-    SELECT t.id, t.nome, t.intervalo_kms, t.ativo, t.created_at,
+    SELECT t.id, t.nome, t.intervalo_kms, t.ativo, t.ordem, t.created_at,
            COUNT(o.id) as codigos_associados
     FROM tipos_operacao t
     LEFT JOIN operacoes o ON o.tipo_id = t.id
@@ -95,13 +104,13 @@ router.get('/tipos-operacao', (_req: Request, res: Response) => {
 
 // POST /api/tipos-operacao
 router.post('/tipos-operacao', (req: Request, res: Response) => {
-  const { nome, intervalo_kms, ativo = true } = req.body;
+  const { nome, intervalo_kms, ativo = true, ordem = 1 } = req.body;
   if (!nome?.trim()) { res.status(400).json({ error: 'Nome é obrigatório' }); return; }
   const dup = queryOne('SELECT id FROM tipos_operacao WHERE UPPER(nome) = UPPER(?)', [nome.trim()]);
   if (dup) { res.status(409).json({ error: 'Tipo já existe' }); return; }
   const result = execute(
-    'INSERT INTO tipos_operacao (nome, intervalo_kms, ativo) VALUES (?, ?, ?)',
-    [nome.trim(), intervalo_kms != null ? Number(intervalo_kms) : null, ativo ? 1 : 0] as SqlValue[]
+    'INSERT INTO tipos_operacao (nome, intervalo_kms, ativo, ordem) VALUES (?, ?, ?, ?)',
+    [nome.trim(), intervalo_kms != null ? Number(intervalo_kms) : null, ativo ? 1 : 0, Number(ordem)] as SqlValue[]
   );
   res.status(201).json({ id: result.lastInsertRowid });
 });
@@ -109,21 +118,22 @@ router.post('/tipos-operacao', (req: Request, res: Response) => {
 // PUT /api/tipos-operacao/:id
 router.put('/tipos-operacao/:id', (req: Request, res: Response) => {
   const { id } = req.params;
-  const existing = queryOne<{ id: number; nome: string; intervalo_kms: number | null; ativo: number }>(
-    'SELECT id, nome, intervalo_kms, ativo FROM tipos_operacao WHERE id = ?', [id]
+  const existing = queryOne<{ id: number; nome: string; intervalo_kms: number | null; ativo: number; ordem: number }>(
+    'SELECT id, nome, intervalo_kms, ativo, ordem FROM tipos_operacao WHERE id = ?', [id]
   );
   if (!existing) { res.status(404).json({ error: 'Tipo não encontrado' }); return; }
-  const { nome, intervalo_kms, ativo } = req.body;
+  const { nome, intervalo_kms, ativo, ordem } = req.body;
   const newNome = nome?.trim() ?? existing.nome;
   if (!newNome) { res.status(400).json({ error: 'Nome é obrigatório' }); return; }
   const dup = queryOne('SELECT id FROM tipos_operacao WHERE UPPER(nome) = UPPER(?) AND id != ?', [newNome, id]);
   if (dup) { res.status(409).json({ error: 'Tipo já existe' }); return; }
   execute(
-    'UPDATE tipos_operacao SET nome = ?, intervalo_kms = ?, ativo = ? WHERE id = ?',
+    'UPDATE tipos_operacao SET nome = ?, intervalo_kms = ?, ativo = ?, ordem = ? WHERE id = ?',
     [
       newNome,
       intervalo_kms !== undefined ? (intervalo_kms != null ? Number(intervalo_kms) : null) : existing.intervalo_kms,
       ativo !== undefined ? (ativo ? 1 : 0) : existing.ativo,
+      ordem !== undefined ? Number(ordem) : existing.ordem,
       id,
     ] as SqlValue[]
   );
