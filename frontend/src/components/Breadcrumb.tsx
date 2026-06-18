@@ -19,7 +19,7 @@ export default function Breadcrumb({ items }: { items?: BreadcrumbItem[] }) {
     const pageName = PAGE_NAMES[location.pathname] ?? 'Página';
     return (
       <div className="flex items-center gap-2 text-sm text-gray-500 mb-6">
-        <span className="text-brand-dark font-semibold">DSP BYD</span>
+        <span className="text-brand-dark font-semibold">DSP</span>
         <span className="text-gray-400">/</span>
         <span className="text-gray-600 font-medium">{pageName}</span>
       </div>

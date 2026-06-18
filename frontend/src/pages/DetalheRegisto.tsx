@@ -37,7 +37,7 @@ function Field({ label, value }: { label: string; value: React.ReactNode }) {
 }
 
 const BREADCRUMB = [
-  { label: 'DSP BYD', to: '/' },
+  { label: 'DSP', to: '/' },
   { label: 'Pesquisa', to: '/pesquisa' },
   { label: 'Detalhe' },
 ];

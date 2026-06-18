@@ -218,7 +218,7 @@ export default function BackofficeOperacoes() {
   return (
     <div className="p-6">
       <Breadcrumb items={[
-        { label: 'DSP BYD' },
+        { label: 'DSP' },
         { label: 'Backoffice' },
         { label: 'Gestão de Operações' },
       ]} />

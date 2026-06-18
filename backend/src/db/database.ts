@@ -38,6 +38,7 @@ function initSchema() {
   try { _db!.run("ALTER TABLE tipos_operacao ADD COLUMN intervalo_kms INTEGER"); } catch {}
   try { _db!.run("ALTER TABLE tipos_operacao ADD COLUMN ativo INTEGER NOT NULL DEFAULT 1"); } catch {}
   try { _db!.run("ALTER TABLE tipos_operacao ADD COLUMN ordem INTEGER NOT NULL DEFAULT 1"); } catch {}
+  // historico_importacoes added later — no ALTER needed, CREATE IF NOT EXISTS handles it
 
   _db!.run(`
     CREATE TABLE IF NOT EXISTS parque_circulante (
@@ -82,6 +83,18 @@ function initSchema() {
       observacoes TEXT,
       created_at TEXT NOT NULL DEFAULT (datetime('now')),
       updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+    );
+    CREATE TABLE IF NOT EXISTS historico_importacoes (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      tipo TEXT NOT NULL,
+      filename TEXT NOT NULL,
+      inserted INTEGER NOT NULL DEFAULT 0,
+      updated INTEGER NOT NULL DEFAULT 0,
+      error_count INTEGER NOT NULL DEFAULT 0,
+      errors TEXT,
+      warnings TEXT,
+      meta_filters TEXT,
+      created_at TEXT NOT NULL DEFAULT (datetime('now'))
     );
   `);
 }
@@ -140,6 +153,14 @@ function seedOperacoesIfEmpty() {
       ('150000/10Anos',1, 1, '150 000 Km / 10 Anos')
   `);
   console.log('Tipos de operação e operações inicializados.');
+}
+
+export function executeNoPersist(sql: string, params: SqlValue[] = []): void {
+  _db!.run(sql, params);
+}
+
+export function flushDb(): void {
+  persist();
 }
 
 // Query helpers (synchronous-style API wrapping sql.js)
